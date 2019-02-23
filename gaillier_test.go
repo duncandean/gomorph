@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/gob"
+	"fmt"
 	"math/big"
 	"testing"
 
-	"github.com/radicalrafi/gomorph/gaillier"
+	"github.com/duncandean/gomorph/gaillier"
 )
 
 func TestKeyGen(t *testing.T) {
@@ -27,6 +30,27 @@ func TestKeyGen(t *testing.T) {
 	}
 
 }
+
+func TestEncodeDecode(t *testing.T) {
+	pub, _, err := gaillier.GenerateKeyPair(rand.Reader, 1024)
+	if err != nil {
+		t.Errorf("Error Generating Keypair")
+	}
+	buffer := new(bytes.Buffer)
+	// encoding
+	enc := gob.NewEncoder(buffer)
+	err = enc.Encode(pub)
+	if err != nil {
+		t.Errorf("encode error: %v", err)
+	}
+	// decoding
+	buffer = bytes.NewBuffer(buffer.Bytes())
+	e := new(gaillier.PubKey)
+	dec := gob.NewDecoder(buffer)
+	err = dec.Decode(e)
+	fmt.Println(e, err)
+}
+
 func TestEncryptDecrypt(t *testing.T) {
 
 	case1 := new(big.Int).SetInt64(9132)

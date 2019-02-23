@@ -12,7 +12,9 @@
 package gaillier
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/gob"
 	"errors"
 	"io"
 	"math/big"
@@ -20,7 +22,7 @@ import (
 
 //Errors definition
 
-/* The Paillier crypto system picks two keys p & q and denotes n = p*q
+/* ErrLongMessage The Paillier crypto system picks two keys p & q and denotes n = p*q
 Messages have to be in the ring Z/nZ (integers modulo n)
 Therefore a Message can't be bigger than n
 */
@@ -32,6 +34,7 @@ var one = big.NewInt(1)
 
 //Key structs
 
+// PubKey wraps the public key
 type PubKey struct {
 	KeyLen int
 	N      *big.Int //n = p*q (where p & q are two primes)
@@ -39,6 +42,47 @@ type PubKey struct {
 	Nsq    *big.Int //N^2
 }
 
+func (p *PubKey) GobEncode() ([]byte, error) {
+	w := new(bytes.Buffer)
+	encoder := gob.NewEncoder(w)
+	err := encoder.Encode(p.KeyLen)
+	if err != nil {
+		return nil, err
+	}
+	err = encoder.Encode(p.N)
+	if err != nil {
+		return nil, err
+	}
+	err = encoder.Encode(p.G)
+	if err != nil {
+		return nil, err
+	}
+	err = encoder.Encode(p.Nsq)
+	if err != nil {
+		return nil, err
+	}
+	return w.Bytes(), nil
+}
+
+func (p *PubKey) GobDecode(buf []byte) error {
+	r := bytes.NewBuffer(buf)
+	decoder := gob.NewDecoder(r)
+	err := decoder.Decode(&p.KeyLen)
+	if err != nil {
+		return err
+	}
+	err = decoder.Decode(&p.N)
+	if err != nil {
+		return err
+	}
+	err = decoder.Decode(&p.G)
+	if err != nil {
+		return err
+	}
+	return decoder.Decode(&p.Nsq)
+}
+
+// PrivKey wraps the private key
 type PrivKey struct {
 	KeyLen int
 	PubKey
@@ -46,6 +90,7 @@ type PrivKey struct {
 	U *big.Int //L^-1 modulo n mu = U = (L(g^L mod N^2)^-1)
 }
 
+// GenerateKeyPair generates a private and public key pair.
 func GenerateKeyPair(random io.Reader, bits int) (*PubKey, *PrivKey, error) {
 
 	p, err := rand.Prime(random, bits/2)
@@ -81,7 +126,7 @@ func GenerateKeyPair(random io.Reader, bits int) (*PubKey, *PrivKey, error) {
 }
 
 /*
-	Encrypt :function to encrypt the message into a paillier cipher text
+	Encrypt encrypts the message into a paillier cipher text
 	using the following rule :
 	cipher = g^m * r^n mod n^2
 	* r is random integer such as 0 <= r <= n
@@ -113,7 +158,7 @@ func Encrypt(pubkey *PubKey, message []byte) ([]byte, error) {
 }
 
 /*
-	Decrypts a given ciphertext following the rule:
+	Decrypt decrypts a given ciphertext following the rule:
 	m = L(c^lambda mod n^2).mu mod n
 	* lambda : L
 	* mu : U
@@ -149,7 +194,7 @@ func Decrypt(privkey *PrivKey, cipher []byte) ([]byte, error) {
 	* Any cipher raised to an integer k will decrypt to the product of the deciphered and k
 */
 
-//Add two ciphers together
+// Add adds two ciphers together
 func Add(pubkey *PubKey, c1, c2 []byte) []byte {
 
 	a := new(big.Int).SetBytes(c1)
@@ -161,7 +206,7 @@ func Add(pubkey *PubKey, c1, c2 []byte) []byte {
 	return res.Bytes()
 }
 
-//Add a constant & a cipher
+// AddConstant adds a constant & a cipher
 func AddConstant(pubkey *PubKey, cipher, constant []byte) []byte {
 
 	c := new(big.Int).SetBytes(cipher)
@@ -175,7 +220,7 @@ func AddConstant(pubkey *PubKey, cipher, constant []byte) []byte {
 
 }
 
-//Multiplication by a constant integer
+// Mul multiplies a cipher by a constant integer
 func Mul(pubkey *PubKey, cipher, constant []byte) []byte {
 
 	c := new(big.Int).SetBytes(cipher)
